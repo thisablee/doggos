@@ -14,7 +14,7 @@ workflows:
       - name: Prepara progetto nativo
         script: |
           set -euo pipefail
-          command -v xcodegen >/dev/null || brew install xcodegen
+          command -v xcodegen >/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install xcodegen
           xcodegen generate
       - name: Test e schermata iPhone
         script: python3 ci/verify.py
@@ -45,7 +45,7 @@ workflows:
       - name: Prepara progetto
         script: |
           set -euo pipefail
-          command -v xcodegen >/dev/null || brew install xcodegen
+          command -v xcodegen >/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install xcodegen
           xcodegen generate
       - name: Test iPhone
         script: python3 ci/verify.py
