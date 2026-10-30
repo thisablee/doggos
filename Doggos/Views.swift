@@ -14,7 +14,16 @@ struct RootView: View {
     }
 }
 struct MoreMenu: View {
-    var body: some View { Menu { NavigationLink(destination: RemindersView()) { Label("Promemoria", systemImage: "bell") }; NavigationLink(destination: DocumentsView()) { Label("Documenti", systemImage: "folder") }; NavigationLink(destination: SettingsView()) { Label("Impostazioni", systemImage: "gearshape") } label: { Image(systemName: "ellipsis.circle").font(.title3) }.accessibilityLabel("Altre sezioni") }
+    var body: some View {
+        Menu {
+            NavigationLink(destination: RemindersView()) { Label("Promemoria", systemImage: "bell") }
+            NavigationLink(destination: DocumentsView()) { Label("Documenti", systemImage: "folder") }
+            NavigationLink(destination: SettingsView()) { Label("Impostazioni", systemImage: "gearshape") }
+        } label: {
+            Image(systemName: "ellipsis.circle").font(.title3)
+        }
+        .accessibilityLabel("Altre sezioni")
+    }
 }
 extension View {
     func doggosPage(_ title: String) -> some View { self.navigationTitle(title).toolbar { ToolbarItem(placement: .topBarTrailing) { MoreMenu() } }.scrollContentBackground(.hidden).background(Palette.background) }
@@ -63,19 +72,87 @@ struct DogsView: View {
     }.doggosPage("I miei cani").sheet(isPresented:$add) { DogEditor() } }
 }
 struct DogDetail: View {
-    @EnvironmentObject var store: DogStore; @Environment(\.dismiss) var dismiss
-    let dogID: UUID; @State private var edit=false; @State private var remove=false; @State private var name=""; @State private var backup: BackupFile?; @State private var exporting=false
-    var body: some View { Group { if let dog=store.dog(dogID) { List {
-        Section { VStack(spacing:13) { Image(systemName:"dog.fill").font(.system(size:55)).padding(28).background(Palette.color(dog.color),in:Circle()); Text(dog.name).font(.largeTitle.bold()); Text("\(grams(dog.weight)) kg").font(.title3).foregroundStyle(.secondary) }.frame(maxWidth:.infinity).padding(.vertical,15) }
-        Section("Il profilo") { if !dog.breed.isEmpty { LabeledContent("Razza",value:dog.breed) }; if !dog.notes.isEmpty { Text(dog.notes) }; Button("Modifica profilo") { edit=true } }
-        Section("I tuoi dati") { Button { export(dog) } label: { Label("Esporta i dati del cane",systemImage:"square.and.arrow.up") }; Button(role:.destructive) { name=""; remove=true } label: { Label("Elimina profilo e dati",systemImage:"trash") } }
-    }.sheet(isPresented:$edit) { DogEditor(existing:dog) }.sheet(isPresented:$remove) { NavigationStack { Form {
-        Section { Text("Verranno rimossi definitivamente il profilo di \(dog.name), i pasti, il piano, le terapie, le somministrazioni, il diario, i promemoria e i documenti associati."); Text("Gli altri cani non saranno modificati.").font(.subheadline).foregroundStyle(.secondary) }
-        Section { Button("Esporta prima di eliminare") { export(dog) }; Text("Gli allegati si esportano separatamente da Documenti.").font(.caption).foregroundStyle(.secondary) }
-        Section("Scrivi \(dog.name) per confermare") { TextField("Nome del cane",text:$name).autocorrectionDisabled(); Button("Elimina definitivamente",role:.destructive) { if store.removeDog(dog) { remove=false; dismiss() } }.disabled(name.trimmingCharacters(in:.whitespacesAndNewlines) != dog.name) }
-    }.navigationTitle("Eliminare \(dog.name)?").navigationBarTitleDisplayMode(.inline).toolbar { ToolbarItem(placement:.cancellationAction) { Button("Annulla") { remove=false } } } }
-    } else { ContentUnavailableView("Profilo eliminato",systemImage:"dog") } }.doggosPage("Il profilo").fileExporter(isPresented:$exporting,document:backup,contentType:.json,defaultFilename:"doggos-cane") { result in if case .failure(let e)=result { store.error=e.localizedDescription } } }
-    func export(_ dog:DogProfile) { do { backup=BackupFile(data:try store.backup(dogID:dog.id)); exporting=true } catch { store.error=error.localizedDescription } }
+    @EnvironmentObject var store: DogStore
+    @Environment(\.dismiss) var dismiss
+    let dogID: UUID
+    @State private var edit = false
+    @State private var remove = false
+    @State private var backup: BackupFile?
+    @State private var exporting = false
+    var body: some View {
+        Group {
+            if let dog = store.dog(dogID) {
+                List {
+                    Section {
+                        VStack(spacing: 13) {
+                            Image(systemName: "dog.fill").font(.system(size: 55)).padding(28).background(Palette.color(dog.color), in: Circle())
+                            Text(dog.name).font(.largeTitle.bold())
+                            Text("\(grams(dog.weight)) kg").font(.title3).foregroundStyle(.secondary)
+                        }.frame(maxWidth: .infinity).padding(.vertical, 15)
+                    }
+                    Section("Il profilo") {
+                        if !dog.breed.isEmpty { LabeledContent("Razza", value: dog.breed) }
+                        if !dog.notes.isEmpty { Text(dog.notes) }
+                        Button("Modifica profilo") { edit = true }
+                    }
+                    Section("I tuoi dati") {
+                        Button { export(dog) } label: { Label("Esporta i dati del cane", systemImage: "square.and.arrow.up") }
+                        Button(role: .destructive) { remove = true } label: { Label("Elimina profilo e dati", systemImage: "trash") }
+                    }
+                }
+                .sheet(isPresented: $edit) { DogEditor(existing: dog) }
+                .sheet(isPresented: $remove) { DeleteDogView(dog: dog) { remove = false; dismiss() } }
+            } else {
+                ContentUnavailableView("Profilo eliminato", systemImage: "dog")
+            }
+        }
+        .doggosPage("Il profilo")
+        .fileExporter(isPresented: $exporting, document: backup, contentType: .json, defaultFilename: "doggos-cane") { result in
+            if case .failure(let error) = result { store.error = error.localizedDescription }
+        }
+    }
+    func export(_ dog: DogProfile) {
+        do { backup = BackupFile(data: try store.backup(dogID: dog.id)); exporting = true }
+        catch { store.error = error.localizedDescription }
+    }
+}
+struct DeleteDogView: View {
+    @EnvironmentObject var store: DogStore
+    @Environment(\.dismiss) var dismiss
+    let dog: DogProfile
+    let onDeleted: () -> Void
+    @State private var name = ""
+    @State private var backup: BackupFile?
+    @State private var exporting = false
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("Verranno rimossi definitivamente il profilo di \(dog.name), i pasti, il piano, le terapie, le somministrazioni, il diario, i promemoria e i documenti associati.")
+                    Text("Gli altri cani non saranno modificati.").font(.subheadline).foregroundStyle(.secondary)
+                }
+                Section {
+                    Button("Esporta prima di eliminare") {
+                        do { backup = BackupFile(data: try store.backup(dogID: dog.id)); exporting = true }
+                        catch { store.error = error.localizedDescription }
+                    }
+                    Text("Gli allegati si esportano separatamente da Documenti.").font(.caption).foregroundStyle(.secondary)
+                }
+                Section("Scrivi \(dog.name) per confermare") {
+                    TextField("Nome del cane", text: $name).autocorrectionDisabled()
+                    Button("Elimina definitivamente", role: .destructive) {
+                        if store.removeDog(dog) { onDeleted() }
+                    }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines) != dog.name)
+                }
+            }
+            .navigationTitle("Eliminare \(dog.name)?")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Annulla") { dismiss() } } }
+        }
+        .fileExporter(isPresented: $exporting, document: backup, contentType: .json, defaultFilename: "doggos-cane") { result in
+            if case .failure(let error) = result { store.error = error.localizedDescription }
+        }
+    }
 }
 struct DogEditor: View {
     @EnvironmentObject var store: DogStore; @Environment(\.dismiss) var dismiss
