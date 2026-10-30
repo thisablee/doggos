@@ -1,4 +1,4 @@
-import json, pathlib, subprocess
+import json, pathlib, subprocess, time
 
 def run(*args):
     subprocess.run(args,check=True)
@@ -10,4 +10,6 @@ run('xcodebuild','test','-project','Doggos.xcodeproj','-scheme','Doggos','-desti
 run('xcrun','simctl','bootstatus',iphone['udid'],'-b')
 run('xcrun','simctl','install',iphone['udid'],'build/DerivedData/Build/Products/Debug-iphonesimulator/Doggos.app')
 run('xcrun','simctl','launch',iphone['udid'],'it.thisable.doggos')
+# Wait for the simulator's launch animation before capturing the actual screen.
+time.sleep(5)
 run('xcrun','simctl','io',iphone['udid'],'screenshot','build/doggos-iphone.png')
