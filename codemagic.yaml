@@ -1,0 +1,55 @@
+workflows:
+  doggos-testflight:
+    name: doggos - iPhone e TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    integrations:
+      app_store_connect: ciotola-apple
+    environment:
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: it.thisable.doggos
+    scripts:
+      - name: Prepara progetto nativo
+        script: |
+          set -euo pipefail
+          command -v xcodegen >/dev/null || brew install xcodegen
+          xcodegen generate
+      - name: Test e schermata iPhone
+        script: python3 ci/verify.py
+      - name: Firma e numero build
+        script: |
+          set -euo pipefail
+          agvtool new-version -all "$((PROJECT_BUILD_NUMBER + 1))"
+          xcode-project use-profiles --custom-export-options='{"testFlightInternalTestingOnly": false, "manageAppVersionAndBuildNumber": false}'
+      - name: Crea app installabile
+        script: xcode-project build-ipa --project Doggos.xcodeproj --scheme Doggos
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - build/doggos-iphone.png
+      - build/DoggosTests.xcresult
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: false
+        submit_to_app_store: false
+  doggos-check:
+    name: doggos - verifica simulatore
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    environment:
+      xcode: latest
+    scripts:
+      - name: Prepara progetto
+        script: |
+          set -euo pipefail
+          command -v xcodegen >/dev/null || brew install xcodegen
+          xcodegen generate
+      - name: Test iPhone
+        script: python3 ci/verify.py
+    artifacts:
+      - build/doggos-iphone.png
+      - build/DoggosTests.xcresult
+      - /tmp/xcodebuild_logs/*.log
